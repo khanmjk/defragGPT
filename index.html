@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disk Defragmenter Simulation</title>
+    <style>
+        /* CSS Styles (Unchanged) */
+        :root {
+            --color-bg: #C0C0C0; --color-border-light: #FFFFFF; --color-border-dark: #808080;
+            --color-border-shadow: #000000; --color-window: #FFFFFF; --color-text: #000000;
+            --color-button-text: #000000; --color-header: #000080; --color-header-text: #FFFFFF;
+            --color-free: #FFFFFF; --color-contiguous: #0000FF; --color-fragmented: #FF0000;
+            --color-moving-read: #00FF00; --color-moving-write: #00FF00; --color-unmovable: #FFFF00;
+            --color-analyzing: #8080FF;
+            --block-size: 7px; --grid-gap: 0px; --grid-border: 1px solid #E0E0E0;
+        }
+        body { font-family: "Tahoma", "MS Sans Serif", Arial, sans-serif; font-size: 12px; background-color: #008080; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; box-sizing: border-box; }
+        .window { background-color: var(--color-bg); border: 1px solid var(--color-border-dark); border-top: 1px solid var(--color-border-light); border-left: 1px solid var(--color-border-light); box-shadow: 1px 1px 0px var(--color-border-shadow); min-width: 650px; max-width: 850px; }
+        .title-bar { background-color: var(--color-header); color: var(--color-header-text); padding: 3px 5px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: default; height: 20px; box-sizing: border-box; }
+        .title-bar-buttons span { display: inline-block; background-color: var(--color-bg); border: 1px solid var(--color-border-dark); border-top: 1px solid var(--color-border-light); border-left: 1px solid var(--color-border-light); box-shadow: 1px 1px 0px var(--color-border-shadow); width: 16px; height: 14px; margin-left: 2px; text-align: center; line-height: 14px; font-weight: bold; font-size: 10px; color: var(--color-button-text); cursor: default; }
+        .content { padding: 10px; }
+        .menu-bar { background-color: var(--color-bg); padding: 2px 4px; border-bottom: 1px solid var(--color-border-dark); margin-bottom: 5px; height: 18px; box-sizing: border-box; line-height: 14px; }
+        .menu-bar span { padding: 0 5px; cursor: default; }
+        .toolbar { margin-bottom: 10px; display: flex; align-items: center; gap: 5px; height: 30px; }
+        .drive-select-label { margin-right: 5px; }
+        select, button { font-family: inherit; font-size: inherit; background-color: var(--color-bg); border: 1px solid var(--color-border-dark); border-top: 1px solid var(--color-border-light); border-left: 1px solid var(--color-border-light); box-shadow: 1px 1px 0px var(--color-border-shadow); padding: 3px 10px; min-width: 75px; height: 23px; box-sizing: border-box; cursor: pointer; }
+        select { height: 21px; padding: 1px 2px; }
+        button:focus { outline: 1px dotted var(--color-text); outline-offset: -4px; }
+        button#stopBtn:focus:not(:disabled) { outline: 1px solid black; outline-offset: 2px; border: 1px dashed black; padding: 3px 10px; }
+        button:active { border: 1px solid var(--color-border-light); border-top: 1px solid var(--color-border-dark); border-left: 1px solid var(--color-border-dark); box-shadow: none; padding: 4px 9px 2px 11px; }
+        button#stopBtn:focus:active:not(:disabled) { padding: 4px 9px 2px 11px; }
+        button:disabled { color: var(--color-border-dark); text-shadow: 1px 1px 0 var(--color-border-light); cursor: default; box-shadow: inset 1px 1px 0px #aaa; border: 1px solid var(--color-border-dark); outline: none; }
+        .analysis-display { border: 1px inset var(--color-border-dark); padding: 10px; background-color: var(--color-window); margin-bottom: 10px; }
+        .analysis-display-label { display: block; margin-bottom: 5px; }
+        .disk-map-container { width: 100%; border: 1px inset #808080; background-color: var(--color-window); padding: 2px; box-sizing: border-box; min-height: 250px; overflow: hidden; }
+        .disk-map { display: grid; gap: var(--grid-gap); background-color: var(--color-window); /* Grid columns set by JS */ }
+        .disk-block { width: var(--block-size); height: var(--block-size); background-color: var(--color-free); border: none; box-sizing: border-box; line-height: var(--block-size); font-size: calc(var(--block-size) - 2px); overflow: hidden; }
+        .block-free { background-color: var(--color-free); border: var(--grid-border); } .block-contiguous { background-color: var(--color-contiguous); } .block-fragmented { background-color: var(--color-fragmented); }
+        .block-moving-read { background-color: var(--color-moving-read); } .block-moving-write { background-color: var(--color-moving-write); } .block-unmovable { background-color: var(--color-unmovable); }
+        .block-analyzing { background-color: var(--color-analyzing); }
+        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); padding-top: 60px; }
+        .modal-content { background-color: var(--color-bg); margin: auto; padding: 15px; border: 1px solid var(--color-border-dark); border-top: 1px solid var(--color-border-light); border-left: 1px solid var(--color-border-light); box-shadow: 1px 1px 0px var(--color-border-shadow); width: 90%; max-width: 750px; position: relative; }
+        .modal-title { background-color: var(--color-header); color: var(--color-header-text); padding: 3px 5px; font-weight: bold; margin: -15px -15px 10px -15px; height: 20px; box-sizing: border-box; line-height: 14px; }
+        .close-button { color: var(--color-button-text); background-color: var(--color-bg); border: 1px solid var(--color-border-dark); border-top: 1px solid var(--color-border-light); border-left: 1px solid var(--color-border-light); box-shadow: 1px 1px 0px var(--color-border-shadow); position: absolute; top: 3px; right: 5px; width: 16px; height: 14px; line-height: 14px; text-align: center; font-weight: bold; font-size: 10px; cursor: pointer; }
+        #legendModal .modal-content { max-width: 350px; } .legend-modal-body { padding: 10px 0; } .legend { display: flex; flex-direction: column; gap: 8px; } .legend-item { display: flex; align-items: center; } .legend-color { width: 40px; height: 15px; margin-right: 10px; border: 1px solid var(--color-border-dark); }
+        #reportModal .modal-content { width: 90%; max-width: 750px; } .report-modal-body { /* Removed flex */ } .report-section { margin-bottom: 20px; } .report-section:last-child { margin-bottom: 0; } .report-section h4 { margin-top: 0; margin-bottom: 5px; text-align: center; } .report-grid-container { border: 1px inset #808080; background-color: var(--color-window); padding: 2px; box-sizing: border-box; height: 280px; overflow-y: auto; } .report-grid { display: grid; gap: var(--grid-gap); background-color: var(--color-window);}
+        .status-bar { border-top: 1px solid var(--color-border-dark); border-left: 1px solid var(--color-border-dark); border-bottom: 1px solid var(--color-border-light); border-right: 1px solid var(--color-border-light); padding: 2px 5px; background-color: var(--color-bg); margin-top: 10px; min-height: 18px; line-height: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="window">
+    <!-- Window structure (Unchanged) -->
+    <div class="title-bar"><span>Disk Defragmenter</span><div class="title-bar-buttons"><span>_</span><span>◻</span><span>X</span></div></div>
+    <div class="menu-bar"><span><u>F</u>ile</span><span><u>A</u>ction</span><span><u>V</u>iew</span><span><u>H</u>elp</span></div>
+    <div class="content">
+        <div class="toolbar">
+            <label class="drive-select-label" for="driveSelect">Volume:</label><select id="driveSelect"><option selected>(C:)</option></select>
+            <button id="analyzeBtn">Analyze</button><button id="defragBtn" disabled>Defragment</button><button id="stopBtn" disabled>Stop</button><button id="legendBtn">Legend</button>
+        </div>
+        <div class="analysis-display">
+            <span class="analysis-display-label">Analysis display for (C:)</span>
+            <div class="disk-map-container"><div id="diskMap" class="disk-map"></div></div>
+        </div>
+        <div class="status-bar" id="statusBar">Ready</div>
+    </div>
+</div>
+
+<!-- Modals (Unchanged) -->
+<div id="legendModal" class="modal"><div class="modal-content"><div class="modal-title">Legend</div><span class="close-button" onclick="closeModal('legendModal')">X</span><div class="legend-modal-body"><div class="legend">
+    <div class="legend-item"><span class="legend-color" style="background-color: var(--color-fragmented);"></span> Fragmented files</div><div class="legend-item"><span class="legend-color" style="background-color: var(--color-contiguous);"></span> Contiguous files</div>
+    <div class="legend-item"><span class="legend-color" style="background-color: var(--color-unmovable);"></span> Unmovable files</div><div class="legend-item"><span class="legend-color block-free" style="border: var(--grid-border);"></span> Free space</div>
+    <div class="legend-item"><span class="legend-color" style="background-color: var(--color-moving-read);"></span> Moving data</div><div class="legend-item"><span class="legend-color block-analyzing" ></span> Being analyzed</div>
+</div></div></div></div>
+<div id="reportModal" class="modal"><div class="modal-content"><div class="modal-title">Defragmentation Report for (C:)</div><span class="close-button" onclick="closeModal('reportModal')">X</span><div class="report-modal-body">
+    <div class="report-section"><h4>Before Defragmentation</h4><div class="report-grid-container"><div id="reportGridBefore" class="report-grid"></div></div></div>
+    <div class="report-section"><h4>After Defragmentation</h4><div class="report-grid-container"><div id="reportGridAfter" class="report-grid"></div></div></div>
+</div><div style="text-align: right; margin-top: 15px;"><button onclick="closeModal('reportModal')">Close</button></div></div></div>
+
+<script>
+    // --- Enums and Constants ---
+    const BlockState = { EMPTY: -1, FREE: 0, CONTIGUOUS: 1, FRAGMENTED: 2, UNMOVABLE: 3, MOVING_READ: 4, MOVING_WRITE: 5, ANALYZING: 6 };
+    const StateClasses = {
+        [BlockState.FREE]: 'block-free', [BlockState.CONTIGUOUS]: 'block-contiguous', [BlockState.FRAGMENTED]: 'block-fragmented',
+        [BlockState.UNMOVABLE]: 'block-unmovable', [BlockState.MOVING_READ]: 'block-moving-read', [BlockState.MOVING_WRITE]: 'block-moving-write',
+        [BlockState.ANALYZING]: 'block-analyzing'
+    };
+    const GRID_WIDTH = 86;
+    const TOTAL_BLOCKS = GRID_WIDTH * 30;
+    const ANALYSIS_DURATION_TARGET_MS = 30 * 1000;
+    const ANALYSIS_BATCH_DELAY_MS = 20;
+    const DEFRAG_DURATION_TARGET_MS = 60 * 1000; // Fixed 60 seconds
+
+    // --- Speed/Visual Parameters for HIGHLY VISIBLE Improvement ---
+    const DEFRAG_MOVE_VISUAL_DELAY_MS = 10; // Minimal visual flash
+    const DEFRAG_STEP_DELAY_MS = 0;         // Run logical steps as fast as possible between timeouts
+    const TARGET_FILE_COUNT = 150;
+    const MIN_FILE_SIZE = 2;
+    const MAX_FILE_SIZE = 60;
+    const UNMOVABLE_FILE_CHANCE = 0.05;     // ** Reduced unmovable chance **
+    const FRAGMENTATION_CHANCE = 0.65;      // Moderate fragmentation
+    const DISK_FILL_TARGET = 0.65;          // ** Significantly reduced fill level (MORE FREE SPACE) **
+
+    // --- DOM Elements (Unchanged) ---
+    const diskMapElement = document.getElementById('diskMap'); const analyzeBtn = document.getElementById('analyzeBtn'); const defragBtn = document.getElementById('defragBtn');
+    const stopBtn = document.getElementById('stopBtn'); const legendBtn = document.getElementById('legendBtn'); const reportGridBefore = document.getElementById('reportGridBefore');
+    const reportGridAfter = document.getElementById('reportGridAfter'); const statusBar = document.getElementById('statusBar');
+
+    // --- Simulation State (Unchanged) ---
+    let diskBlocks = []; let files = []; let initialDiskState = []; let initialFilesState = []; let blockElements = []; let isAnalyzing = false; let isDefragmenting = false;
+    let simulationTimer = null; let stepTimer = null; let defragStartTime = 0;
+
+    // --- File Name Generation (Unchanged) ---
+    const filePrefixes = ["sys", "win", "prog", "doc", "tmp", "dat", "img", "vid", "aud", "bak", "log"]; const fileNames = ["kernel", "user", "shell", "config", "report", "document", "image", "video", "audio", "backup", "error", "access", "install", "setup", "data", "temp"]; const fileExts = ["dll", "exe", "ini", "txt", "doc", "docx", "xls", "xlsx", "ppt", "jpg", "png", "gif", "mp4", "avi", "mp3", "wav", "bak", "log", "dat", "tmp", "sys"]; let fileNameCounter = 0; function generateFileName() { fileNameCounter++; const p = filePrefixes[Math.floor(Math.random() * filePrefixes.length)]; const n = fileNames[Math.floor(Math.random() * fileNames.length)]; const e = fileExts[Math.floor(Math.random() * fileExts.length)]; return `${p}${fileNameCounter}\\${n}_${Math.floor(Math.random()*100)}.${e}`; }
+
+    // --- Initialization & Grid (Adjusted fill target use) ---
+    function createGrid(container, blockStatesRef) { /* unchanged */ container.innerHTML = ''; const blockElems = []; const blockStyle = getComputedStyle(document.documentElement); const blockSize = blockStyle.getPropertyValue('--block-size'); const gridGap = blockStyle.getPropertyValue('--grid-gap'); container.style.gridTemplateColumns = `repeat(${GRID_WIDTH}, ${blockSize})`; container.style.gap = gridGap; for (let i = 0; i < TOTAL_BLOCKS; i++) { const block = document.createElement('div'); block.classList.add('disk-block'); block.dataset.index = i; const blockStateValue = blockStatesRef ? blockStatesRef[i] : BlockState.FREE; let state; if (blockStateValue === BlockState.FREE || blockStateValue === BlockState.EMPTY) { state = BlockState.FREE; } else { const file = files.find(f => f.id === blockStateValue); if (file) { state = file.isMovable ? (file.isFragmented ? BlockState.FRAGMENTED : BlockState.CONTIGUOUS) : BlockState.UNMOVABLE; } else { state = BlockState.FREE; } } const stateClass = StateClasses[state] || StateClasses[BlockState.FREE]; block.classList.add(stateClass); block.style.border = (state === BlockState.FREE) ? 'var(--grid-border)' : 'none'; container.appendChild(block); blockElems.push(block); } return blockElems; }
+
+    function initializeDiskState() {
+        diskBlocks = new Array(TOTAL_BLOCKS).fill(BlockState.FREE);
+        files = []; fileNameCounter = 0; let currentFileId = 1; let blocksAssigned = 0;
+        const targetBlocksToAssign = Math.floor(TOTAL_BLOCKS * DISK_FILL_TARGET); // Use adjusted target
+
+        while (files.length < TARGET_FILE_COUNT && blocksAssigned < targetBlocksToAssign) {
+            const fileSize = Math.floor(Math.random() * (MAX_FILE_SIZE - MIN_FILE_SIZE + 1)) + MIN_FILE_SIZE;
+            if (blocksAssigned + fileSize > targetBlocksToAssign + 50) continue;
+            const file = { id: currentFileId++, name: generateFileName(), size: fileSize, isMovable: Math.random() > UNMOVABLE_FILE_CHANCE, isFragmented: false, blocks: [] }; // Use adjusted unmovable chance
+            let fragments = 1; if (file.isMovable && Math.random() < FRAGMENTATION_CHANCE) { fragments = Math.floor(Math.random() * 3) + 2; } let blocksToPlace = file.size; let placementSuccessful = true; const potentialBlocks = [];
+            for (let frag = 0; frag < fragments; frag++) { const fragSize = (frag === fragments - 1) ? blocksToPlace : Math.ceil(blocksToPlace / (fragments - frag)); blocksToPlace -= fragSize; let attempt = 0; let startIndex = -1; const maxAttempts = 50; while (attempt < maxAttempts) { const randIndex = Math.floor(Math.random() * (TOTAL_BLOCKS - fragSize)); let isFree = true; for (let i = 0; i < fragSize; i++) { if (diskBlocks[randIndex + i] !== BlockState.FREE) { isFree = false; break; } } if (isFree) { startIndex = randIndex; break; } attempt++; } if (startIndex !== -1) { for (let i = 0; i < fragSize; i++) { potentialBlocks.push(startIndex + i); } } else { placementSuccessful = false; break; } }
+            if (placementSuccessful) { file.blocks = potentialBlocks.sort((a, b) => a - b); file.isFragmented = fragments > 1; file.blocks.forEach(index => { diskBlocks[index] = file.id; }); files.push(file); blocksAssigned += file.size; } else { currentFileId--; }
+        }
+        initialFilesState = JSON.parse(JSON.stringify(files)); initialDiskState = [...diskBlocks];
+        console.log(`Initialized with ${files.length} files, ${blocksAssigned} blocks used. Target fill: ${DISK_FILL_TARGET * 100}%. Unmovable chance: ${UNMOVABLE_FILE_CHANCE * 100}%.`);
+    }
+
+    function updateGridDisplayFromFileState() { /* unchanged */ const currentBlockStates = new Array(TOTAL_BLOCKS).fill(BlockState.FREE); files.forEach(file => { file.blocks.forEach(index => { if (index >= 0 && index < TOTAL_BLOCKS) { currentBlockStates[index] = file.id; } }); }); for (let i = 0; i < TOTAL_BLOCKS; i++) { const blockValue = currentBlockStates[i]; let state; if (blockValue === BlockState.FREE) { state = BlockState.FREE; } else { const file = files.find(f => f.id === blockValue); state = file ? (file.isMovable ? (file.isFragmented ? BlockState.FRAGMENTED : BlockState.CONTIGUOUS) : BlockState.UNMOVABLE) : BlockState.FREE; } updateSingleBlockVisual(i, state); } }
+    function updateSingleBlockVisual(index, newState) { /* unchanged */ if (index >= 0 && index < TOTAL_BLOCKS && blockElements[index]) { const block = blockElements[index]; const expectedClass = StateClasses[newState] || StateClasses[BlockState.FREE]; if (!block.classList.contains(expectedClass) || block.className.split(' ').length > 2) { block.className = 'disk-block'; block.classList.add(expectedClass); } block.style.border = (newState === BlockState.FREE) ? 'var(--grid-border)' : 'none'; } }
+
+    // --- Simulation Logic ---
+    function startAnalysis() { /* unchanged */ if (isAnalyzing || isDefragmenting) return; isAnalyzing = true; let analysisProgress = 0; analysisStartTime = Date.now(); setStatus('Analyzing drive (C:)... 0% complete'); disableButtons(); stopBtn.disabled = false; stopBtn.focus(); blockElements = createGrid(diskMapElement, null); initializeDiskState(); blockElements = createGrid(diskMapElement, diskBlocks); updateGridDisplayFromFileState(); const totalBatches = Math.ceil(ANALYSIS_DURATION_TARGET_MS / ANALYSIS_BATCH_DELAY_MS); const blocksPerBatch = Math.ceil(TOTAL_BLOCKS / totalBatches); function analysisStep() { if (!isAnalyzing) { finishAnalysis(true); return; } const batchEnd = Math.min(analysisProgress + blocksPerBatch, TOTAL_BLOCKS); for (let i = analysisProgress; i < batchEnd; i++) { if (!blockElements[i]) continue; const blockValue = diskBlocks[i]; let actualState; if (blockValue === BlockState.FREE) { actualState = BlockState.FREE; } else { const file = files.find(f => f.id === blockValue); actualState = file ? (file.isMovable ? (file.isFragmented ? BlockState.FRAGMENTED : BlockState.CONTIGUOUS) : BlockState.UNMOVABLE) : BlockState.FREE; } updateSingleBlockVisual(i, BlockState.ANALYZING); setTimeout(() => { if (isAnalyzing) { updateSingleBlockVisual(i, actualState); } }, 150); } analysisProgress = batchEnd; const elapsed = Date.now() - analysisStartTime; const percentComplete = Math.min(100, Math.floor((elapsed / ANALYSIS_DURATION_TARGET_MS) * 100)); setStatus(`Analyzing drive (C:)... ${percentComplete}% complete`); if (elapsed >= ANALYSIS_DURATION_TARGET_MS || analysisProgress >= TOTAL_BLOCKS) { for (let i = 0; i < TOTAL_BLOCKS; i++) { const blockValue = diskBlocks[i]; let actualState; if (blockValue === BlockState.FREE) { actualState = BlockState.FREE; } else { const file = files.find(f => f.id === blockValue); actualState = file ? (file.isMovable ? (file.isFragmented ? BlockState.FRAGMENTED : BlockState.CONTIGUOUS) : BlockState.UNMOVABLE) : BlockState.FREE; } updateSingleBlockVisual(i, actualState); } finishAnalysis(false); } else { simulationTimer = setTimeout(analysisStep, ANALYSIS_BATCH_DELAY_MS); } } simulationTimer = setTimeout(analysisStep, ANALYSIS_BATCH_DELAY_MS); }
+    function finishAnalysis(stoppedByUser) { /* unchanged */ isAnalyzing = false; clearTimeout(simulationTimer); simulationTimer = null; updateGridDisplayFromFileState(); if (stoppedByUser) { setStatus('Analysis stopped.'); enableButtons(false); } else { setStatus('Analysis complete for (C:). It is recommended that you defragment this volume.'); enableButtons(true); } stopBtn.disabled = true; }
+
+    function startDefragmentation() {
+        // Uses the VERY fast DEFRAG_MOVE_VISUAL_DELAY_MS and DEFRAG_STEP_DELAY_MS values
+        if (isAnalyzing || isDefragmenting) return; if (files.length === 0) { setStatus("Please analyze the drive first."); return; } isDefragmenting = true; defragStartTime = Date.now(); setStatus('Defragmenting drive (C:)... 0% complete'); disableButtons(); stopBtn.disabled = false; stopBtn.focus(); let currentFileIndex = 0; let targetSearchStartIndex = 0;
+        function defragmentStep() {
+            if (!isDefragmenting) { finishDefragmentation(true); return; }
+            const elapsed = Date.now() - defragStartTime; const percentComplete = Math.min(100, Math.floor((elapsed / DEFRAG_DURATION_TARGET_MS) * 100)); let fileToMove = null; let processedInStep = 0; const maxProcessPerStep = 20; // Try even more moves per cycle
+
+            while(processedInStep < maxProcessPerStep && currentFileIndex < files.length) {
+                 if (!isDefragmenting) break; fileToMove = null; let searchIdx = currentFileIndex;
+                 while(searchIdx < files.length) { if (files[searchIdx].isMovable && files[searchIdx].isFragmented) { fileToMove = files[searchIdx]; currentFileIndex = searchIdx; break; } searchIdx++; }
+                 if (!fileToMove) { currentFileIndex = files.length; break; }
+
+                 // Update status less frequently to avoid bottlenecking, maybe only when processedInStep==0?
+                 if(processedInStep === 0) setStatus(`Moving file '${fileToMove.name}'... ${percentComplete}% complete`);
+
+                 let targetStartIndex = -1; let currentFreeCount = 0;
+                 // Optimization: only search for free space if needed
+                 for (let i = targetSearchStartIndex; i <= TOTAL_BLOCKS - fileToMove.size; i++) { currentFreeCount = 0; for (let j = 0; j < fileToMove.size; j++) { if (diskBlocks[i + j] !== BlockState.FREE) { i = i + j; currentFreeCount = 0; break; } currentFreeCount++; } if (currentFreeCount === fileToMove.size) { targetStartIndex = i; break; } }
+
+                 if (targetStartIndex !== -1) {
+                     const sourceBlocksIndices = [...fileToMove.blocks]; const targetBlocksIndices = Array.from({ length: fileToMove.size }, (_, k) => targetStartIndex + k);
+                     // Update logic first
+                     sourceBlocksIndices.forEach(index => { diskBlocks[index] = BlockState.FREE; }); targetBlocksIndices.forEach(index => { diskBlocks[index] = fileToMove.id; }); fileToMove.blocks = targetBlocksIndices; fileToMove.isFragmented = false;
+                     // Quick visual flash (might be almost invisible with delay 0)
+                     sourceBlocksIndices.forEach(index => updateSingleBlockVisual(index, BlockState.MOVING_READ)); targetBlocksIndices.forEach(index => updateSingleBlockVisual(index, BlockState.MOVING_WRITE));
+                     setTimeout(() => { // Visual cleanup
+                         if (!isDefragmenting) return; // Check flag inside timeout
+                         sourceBlocksIndices.forEach(index => updateSingleBlockVisual(index, BlockState.FREE));
+                         targetBlocksIndices.forEach(index => updateSingleBlockVisual(index, BlockState.CONTIGUOUS));
+                     }, DEFRAG_MOVE_VISUAL_DELAY_MS);
+                     targetSearchStartIndex = targetStartIndex + fileToMove.size; // Optimize next search start
+                 } else { console.warn(`No space for file ${fileToMove.id}`); /* Skip */ }
+                 currentFileIndex++; processedInStep++;
+            } // End while loop
+
+            if (isDefragmenting && currentFileIndex < files.length) {
+                 stepTimer = setTimeout(defragmentStep, DEFRAG_STEP_DELAY_MS); // Schedule next step (almost immediately if delay is 0)
+            } else if (isDefragmenting) { finishDefragmentation(false); } // Finished all files
+        }
+        stepTimer = setTimeout(defragmentStep, DEFRAG_STEP_DELAY_MS); // Start loop
+        simulationTimer = setTimeout(() => { if (isDefragmenting) { console.log("Defrag 60s duration timeout."); finishDefragmentation(false); } }, DEFRAG_DURATION_TARGET_MS); // Master 60s timer
+    }
+
+    function finishDefragmentation(stoppedByUser) { /* unchanged */ if (!isDefragmenting && !stoppedByUser) return; isDefragmenting = false; clearTimeout(simulationTimer); simulationTimer = null; clearTimeout(stepTimer); stepTimer = null; updateGridDisplayFromFileState(); if (stoppedByUser) { setStatus('Defragmentation stopped.'); enableButtons(true); } else { setStatus(`Defragmenting drive (C:)... 100% complete`); setTimeout(() => { alert('Defragmentation is complete for (C:).'); showReportModal(); enableButtons(true); setStatus('Defragmentation complete.'); }, 100); } stopBtn.disabled = true; }
+    function stopSimulation() { /* unchanged */ if (isAnalyzing) { isAnalyzing = false; console.log("Stop analysis req."); } else if (isDefragmenting) { isDefragmenting = false; console.log("Stop defrag req."); finishDefragmentation(true); } }
+
+    // --- UI Helpers (Unchanged) ---
+    function setStatus(message) { statusBar.textContent = message; }
+    function disableButtons() { analyzeBtn.disabled = true; defragBtn.disabled = true; stopBtn.disabled = true; legendBtn.disabled = true; }
+    function enableButtons(allowDefrag) { analyzeBtn.disabled = false; defragBtn.disabled = !allowDefrag; stopBtn.disabled = true; legendBtn.disabled = false; }
+    function openModal(modalId) { document.getElementById(modalId).style.display = 'block'; }
+    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+    // --- Report Generation (Unchanged) ---
+    function renderGridState(container, blockStatesArray) { /* unchanged */ container.innerHTML = ''; const blockStyle = getComputedStyle(document.documentElement); const blockSize = blockStyle.getPropertyValue('--block-size'); const gridGap = blockStyle.getPropertyValue('--grid-gap'); container.style.gridTemplateColumns = `repeat(${GRID_WIDTH}, ${blockSize})`; container.style.gap = gridGap; if (!blockStatesArray || blockStatesArray.length === 0) { container.textContent = "No data."; return; } const reportFiles = (container === reportGridBefore) ? initialFilesState : files; for (let i = 0; i < blockStatesArray.length; i++) { const block = document.createElement('div'); block.className = 'disk-block'; const blockValue = blockStatesArray[i]; let state; if (blockValue === BlockState.FREE || blockValue === BlockState.EMPTY) { state = BlockState.FREE; } else { const file = reportFiles.find(f => f.id === blockValue); state = file ? (file.isMovable ? (file.isFragmented ? BlockState.FRAGMENTED : BlockState.CONTIGUOUS) : BlockState.UNMOVABLE) : BlockState.FREE; } block.classList.add(StateClasses[state] || StateClasses[BlockState.FREE]); block.style.border = (state === BlockState.FREE) ? 'var(--grid-border)' : 'none'; container.appendChild(block); } }
+    function showReportModal() { /* unchanged */ if (initialDiskState.length !== TOTAL_BLOCKS || diskBlocks.length !== TOTAL_BLOCKS) { console.error("Cannot generate report: Missing data."); return; } renderGridState(reportGridBefore, initialDiskState); renderGridState(reportGridAfter, diskBlocks); openModal('reportModal'); }
+
+    // --- Event Listeners (Unchanged) ---
+    analyzeBtn.addEventListener('click', startAnalysis); defragBtn.addEventListener('click', startDefragmentation); stopBtn.addEventListener('click', stopSimulation); legendBtn.addEventListener('click', () => openModal('legendModal'));
+
+    // --- Initial Setup (Unchanged) ---
+    blockElements = createGrid(diskMapElement, null); setStatus('Ready. Click Analyze to begin.');
+
+</script>
+
+</body>
+</html>
